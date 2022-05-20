@@ -1,0 +1,82 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+Parameters:
+  AmiId:
+    Type: "AWS::EC2::Image::Id"
+    Description: Identifier of new AMI to be deployed
+  Version:
+    Type: "String"
+    Description: Version of the software deployed
+  Subnets:
+    Type: "String"
+    Description: "Subnets where ASG should deploy the new instances"
+  InstanceType:
+    Type: "String"
+    Description: "Instance Type for running the instances"
+  IAMInstanceProfile:
+    Type: "String"
+    Description: "Instance Type for running the instances"
+    Default: "Adapt-Github-BuildImgEC2InstanceProfile-9aCfgCP6X2hv"
+Resources:
+  # Metadata around AMI to roll it out to a Development environment
+  # using an AutoScalingGroup
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "${AWS::StackName}-Template"
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        IamInstanceProfile:
+          Name: !Ref IAMInstanceProfile
+        UserData: !Base64 |
+          #!/bin/bash -x
+          systemctl start mongod.service
+          node server
+        InstanceType: !Sub "${InstanceType}"
+        BlockDeviceMappings:
+          - DeviceName: "/dev/xvda"
+            Ebs:
+              DeleteOnTermination: true
+              Encrypted: true
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Application
+                Value: !Sub
+                  - "${ShortName}"
+                  - ShortName: !Select [0, !Split ["-", !Ref AWS::StackName]]
+              - Key: Name
+                Value: !Sub
+                  - "${ShortName} version ${Version}"
+                  - ShortName: !Select [0, !Split ["-", !Ref AWS::StackName]]
+              - Key: Version
+                Value: !Sub "${Version}"
+          - ResourceType: volume
+            Tags:
+              - Key: Application
+                Value: !Sub
+                  - "${ShortName}"
+                  - ShortName: !Select [0, !Split ["-", !Ref AWS::StackName]]
+              - Key: Name
+                Value: !Sub
+                  - "${ShortName} version ${Version}"
+                  - ShortName: !Select [0, !Split ["-", !Ref AWS::StackName]]
+  # AutoScalingGroup used as Development Environment for rolling out
+  # the newly created AMI
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      MinSize: "1"
+      MaxSize: "1"
+      # Please REMOVE the next line if you want to avoid interfering
+      # with existing capacity in the ASG
+      DesiredCapacity: "3"
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      VPCZoneIdentifier: !Split [",", !Sub "${Subnets}"]
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 2
+        PauseTime: PT10S

@@ -1,0 +1,157 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+Parameters:
+  BucketName:
+    Type: "String"
+    Description: "S3 Bucket containing build artifacts; should come from the CodeBuild step in Codepipeline"
+    Default: "adapt-github-demoartifactbucket-mgwgiufb8lkc"
+  ObjectKey:
+    Type: String
+    Description: "Specific reference to the build file within the bucket; should come from the CodeBuild step in Codepipeline"
+    Default: "Adapt-Github-Pipelin/source/qsECRD5"
+  Version:
+    Type: String
+    Description: "Version number for the ImageBuilder Component; provided by AWS Lambda in previous preparation step."
+    Default: "1.0.0"
+  Architecture:
+    Type: "String"
+    Description: "Select between x86 and ARM instances"
+    Default: x86
+    AllowedValues:
+      - x86
+      - arm64
+  InstanceType:
+    Type: "String"
+    Description: "Instance Type for building the instances"
+    Default: "t2.micro"
+  InstanceProfile:
+    Type: "String"
+    Description: "Instance Profile required for EC2 during the build of the instance"
+    Default: "Adapt-Github-BuildImgEC2InstanceProfile-9aCfgCP6X2hv"
+  SuperUserEmail:
+    Type: "String"
+    Description: "Enter the super user email address to be used"
+    Default: "test@gmail.com"
+  SuperUserPassword:
+    Type: "String"
+    Description: "Enter the super user password to be used"
+    Default: "password"
+Resources:
+  # This Component in the EC2 Image Builder setup contains the main logi
+  # for installing the AMI. In this demo, the full script is inline. This
+  # could be modified to read a script from an S3 bucket the same way that
+  # the main build artifact is taken from an S3 bucket. Since this Cloud-
+  # Formation template itself is also in Version Control, it can easily
+  # be updated when needed for demo purposes.
+  DemoComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      ChangeDescription: !Sub
+        - "Update ${ShortName} Image (${Architecture}) to version ${Version}"
+        - ShortName: !Select [0, !Split ["-", !Ref AWS::StackName]]
+      Data: !Sub |
+        name: Nodejs Application on Amazon Linux 2
+        description: Current version - ${Version}
+        schemaVersion: 1.0
+        phases:
+          - name: build
+            steps:
+              - name: DownloadCode 
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - cd /opt
+                    - sudo su
+                    - yum upgrade -y
+                    - echo "Installing MongoDB and git" >&2
+                    - yum install -y gcc-c++ make git
+                    - |
+                      cat <<EOF > /etc/yum.repos.d/mongodb-org-5.0.repo
+                      [mongodb-org-5.0]
+                      name=MongoDB Repository 
+                      baseurl=https://repo.mongodb.org/yum/amazon/2/mongodb-org/5.0/x86_64/
+                      gpgcheck=1
+                      enabled=1
+                      gpgkey=https://www.mongodb.org/static/pgp/server-5.0.asc
+                      EOF
+                    - yum install -y mongodb-org
+                    - echo "Install node and npm" >&2
+                    - curl -sL https://rpm.nodesource.com/setup_14.x | sudo -E bash - 
+                    - yum install -y nodejs 
+                    - echo "Starting MongoDB" >&2
+                    - sudo systemctl start mongod.service
+                    - sudo systemctl enable mongod.service
+                    - echo "Creating source code directory" >&2
+                    - sudo mkdir /home/ec2-user/sourcecode
+                    - cd /home/ec2-user/sourcecode
+                    - echo "Copying the code from S3" >&2
+                    - result=`aws s3 cp s3://${BucketName}/${ObjectKey} /tmp`
+                    - destination=${!result##* }
+                    - echo "Unziping the code in the server" >&2
+                    - unzip $destination
+                    - chmod -R 755 /home/ec2-user/sourcecode
+                    - rm -rf $destination
+                    - sleep 5
+                    - echo "Installing npm modules in the server" >&2
+                    - rm -f package-lock.json
+                    - rm -rf node_modules
+                    - npm install --production
+                    - npm install -g grunt-cli
+                    - yes ""|node install --install=Y --suEmail=${SuperUserEmail} --suPassword=${SuperUserPassword} --suRetypePassword=${SuperUserPassword}
+                    - echo "Installation successful" >&2
+                    - sleep 10
+      Description: !Sub
+        - "${ShortName} Component"
+        - ShortName: !Select [0, !Split ["-", !Ref AWS::StackName]]
+      Name: !Sub "${AWS::StackName}-Component"
+      Platform: Linux
+      Version: !Sub ${Version}
+  # Image is the ultimate outcome of the EC2 Image Builder process. Notice
+  # the reference to this item in the Outputs. It comnbines the Recipe with
+  # the Infrastructure Configuration.
+  DemoImage:
+    Type: AWS::ImageBuilder::Image
+    Properties:
+      ImageRecipeArn: !GetAtt DemoImageRecipe.Arn
+      InfrastructureConfigurationArn: !GetAtt DemoInfrastructureConfiguration.Arn
+      EnhancedImageMetadataEnabled: false
+      ImageTestsConfiguration:
+        ImageTestsEnabled: false
+      Tags:
+        Application: "DemoImageBuilder"
+  # The recipe is a set of Components required to build an Image. In this case
+  # we need only a single component as it contains all the logic in one.
+  DemoImageRecipe:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      Components:
+        - ComponentArn: !GetAtt DemoComponent.Arn
+      # This becomes the AMI description
+      Description: !Sub
+        - "${ShortName} Image (${Architecture}) version ${Version}"
+        - ShortName: !Select [0, !Split ["-", !Ref AWS::StackName]]
+      Name: !Sub
+        - "${ShortName}-Image"
+        - ShortName: !Select [0, !Split ["-", !Ref AWS::StackName]]
+      ParentImage: !Sub "arn:aws:imagebuilder:${AWS::Region}:aws:image/amazon-linux-2-${Architecture}/x.x.x"
+      Version: !Sub ${Version}
+  # The infrastructure configuration specifies the machine type and role name.
+  # For this purpose, a t3.nano or t3a.nano is sufficient and helps keep
+  # cost low.
+  DemoInfrastructureConfiguration:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      InstanceProfileName: !Sub "${InstanceProfile}"
+      InstanceTypes:
+        - !Sub "${InstanceType}"
+      Name: !Sub "${AWS::StackName}-InfraConfig"
+      Logging:
+        S3Logs:
+          S3BucketName: "github-codepipeline-artifacts"
+Outputs:
+  DemoImageArn:
+    Description: Reference to EC2 Image Builder Output Arn
+    Value: !GetAtt DemoImage.Arn
+  DemoImageId:
+    Description: Reference to EC2 Image Builder Output ImageId
+    Value: !GetAtt DemoImage.ImageId
