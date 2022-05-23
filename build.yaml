@@ -32,6 +32,14 @@ Parameters:
     Type: "String"
     Description: "Enter the super user email address to be used"
     Default: "test@gmail.com"
+  SubnetId:
+    Type: "String"
+    Description: "Enter the super user email address to be used"
+    Default: "subnet-715f233c"
+  SecurityGroupId:
+    Type: "String"
+    Description: "Enter the super user email address to be used"
+    Default: "sg-957b20a9"
   SuperUserPassword:
     Type: "String"
     Description: "Enter the super user password to be used"
@@ -145,6 +153,9 @@ Resources:
       InstanceTypes:
         - !Sub "${InstanceType}"
       Name: !Sub "${AWS::StackName}-InfraConfig"
+      SecurityGroupIds:
+        - !Ref SecurityGroupId
+      SubnetId: !Ref SubnetId
       Logging:
         S3Logs:
           S3BucketName: "github-codepipeline-artifacts"
