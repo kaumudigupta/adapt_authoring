@@ -25,7 +25,7 @@ Parameters:
     Description: Select between Intel/AMD (x86) and ARM architecture
   InstanceType:
     Type: String
-    Default: t3.nano
+    Default: t2.micro
     AllowedValues:
       - t2.micro
       - t3.nano
@@ -37,6 +37,14 @@ Parameters:
       - m6g.medium
       - m6g.large
     Description: For x86, select t3/m5(a). For ARM, select t4g/m6g instances
+  BuildStackName:
+    Type: String
+    Description: Add the builder stack name here instead
+    Default: "AdaptBuilder"
+  ASGStackName:
+    Type: String
+    Description: Add the ASG stack name here.
+    Default: "AdaptASG"
 Resources:
   # The CI/CD pipeline stitching the full mechanism together
   CodeStarConnection:
@@ -93,7 +101,7 @@ Resources:
                 Provider: CloudFormation
                 Version: "1"
               Configuration:
-                StackName: !Sub "${AWS::StackName}-BuildImg"
+                StackName: !Ref BuildStackName
                 RoleArn: !GetAtt BuildImgCFRole.Arn
                 ParameterOverrides: !Sub
                   - "{${Map}}"
@@ -105,9 +113,12 @@ Resources:
                         - !Sub '"InstanceProfile": "${BuildImgEC2InstanceProfile}"'
                         - !Sub '"Architecture": "${Architecture}"'
                         - !Sub '"InstanceType": "${InstanceType}"'
+                        - !Sub
+                          - '"SubnetId": "${JoinSubnets}"'
+                          - "JoinSubnets": !Join [",", !Ref Subnets]
                 ActionMode: CHANGE_SET_REPLACE
                 ChangeSetName: buildimage
-                TemplatePath: source::cf-build-image.yaml
+                TemplatePath: source::build.yaml
               InputArtifacts:
                 - Name: source
               Name: create_change_set
@@ -121,7 +132,7 @@ Resources:
                 Provider: CloudFormation
                 Version: "1"
               Configuration:
-                StackName: !Sub "${AWS::StackName}-BuildImg"
+                StackName: !Ref BuildStackName
                 ActionMode: CHANGE_SET_EXECUTE
                 ChangeSetName: buildimage
               Name: apply_change_set
@@ -137,7 +148,7 @@ Resources:
                 Provider: CloudFormation
                 Version: "1"
               Configuration:
-                StackName: !Sub "${AWS::StackName}-DeployImg"
+                StackName: !Ref ASGStackName
                 RoleArn: !GetAtt DeployImgCFRole.Arn
                 ParameterOverrides: !Sub
                   - "{${Map}}"
@@ -145,19 +156,13 @@ Resources:
                       - ","
                       - - '"AmiId": "#{BuildImgCFParamApplyVars.DemoImageId}"'
                         - '"Version": "#{BuildImgParamVars.Version}"'
-                        - '"SourceAuthorDate": "#{SourceVars.AuthorDate}"'
-                        - '"SourceBranchName": "#{SourceVars.BranchName}"'
-                        - '"SourceCommitId": "#{SourceVars.CommitId}"'
-                        - '"SourceCommitMessage": "#{SourceVars.CommitMessage}"'
-                        - '"SourceCommitterDate": "#{SourceVars.CommitterDate}"'
-                        - '"SourceRepositoryName": "#{SourceVars.RepositoryName}"'
                         - !Sub
                           - '"Subnets": "${JoinSubnets}"'
                           - "JoinSubnets": !Join [",", !Ref Subnets]
                         - !Sub '"InstanceType": "${InstanceType}"'
                 ActionMode: CHANGE_SET_REPLACE
                 ChangeSetName: deployimage
-                TemplatePath: source::cf-deploy-image.yaml
+                TemplatePath: source::ASG.yaml
               InputArtifacts:
                 - Name: source
               Name: create_change_set
@@ -171,7 +176,7 @@ Resources:
                 Provider: CloudFormation
                 Version: "1"
               Configuration:
-                StackName: !Sub "${AWS::StackName}-DeployImg"
+                StackName: !Ref ASGStackName
                 ActionMode: CHANGE_SET_EXECUTE
                 ChangeSetName: deployimage
               Name: apply_change_set
@@ -488,10 +493,12 @@ Resources:
               - s3:GetObjectVersion
               - s3:GetBucketVersioning
               - s3:PutObject
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - autoscaling:CreateAutoScalingGroup
             Effect: Allow
-            Resource:
-              - !GetAtt DemoArtifactBucket.Arn
-              - !Sub "${DemoArtifactBucket.Arn}/*"
+            Resource: "*"
           - Action:
               - codestar-connections:UseConnection
               - appconfig:StartDeployment
@@ -605,7 +612,6 @@ Resources:
               - !GetAtt BuildImgEC2Role.Arn
               - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/*imagebuilder*"
               - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*imagebuilder*"
-              - !Sub "arn:${AWS::Partition}:iam::aws:policy/AmazonS3FullAccess"
             Condition:
               StringEquals:
                 iam:PassedToService: "ec2.amazonaws.com"
@@ -640,6 +646,18 @@ Resources:
               - ec2:DescribeSnapshots
             Effect: Allow
             Resource: "*"
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:PutObjectAcl
+              - s3:GetObjectVersion
+              - s3:GetBucketVersioning
+              - s3:PutObject
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Effect: Allow
+            Resource: "*"
       Roles:
         - Ref: BuildImgCFRole
   # Policy for the specific action in CodePipeline that calls
@@ -659,7 +677,7 @@ Resources:
               StringEqualsIfExists:
                 cloudformation:ChangeSetName: buildimage
             Effect: Allow
-            Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}-BuildImg/*"
+            Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${BuildStackName}/*"
           - Action: iam:PassRole
             Effect: Allow
             Resource: !GetAtt BuildImgCFRole.Arn
@@ -667,9 +685,7 @@ Resources:
               - s3:GetObject
               - s3:ListBucket
             Effect: Allow
-            Resource:
-              - !GetAtt DemoArtifactBucket.Arn
-              - !Sub "${DemoArtifactBucket.Arn}/*"
+            Resource: "*"
       Roles:
         - Ref: BuildImgCreateActionRole
   # Policy for the specific action in CodePipeline that calls
@@ -688,7 +704,7 @@ Resources:
               StringEqualsIfExists:
                 cloudformation:ChangeSetName: buildimage
             Effect: Allow
-            Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}-BuildImg/*"
+            Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${BuildStackName}/*"
       Roles:
         - Ref: BuildImgApplyActionRole
   # Policy for AWS CloudFormation to create a LaunchTemplate version
@@ -711,7 +727,7 @@ Resources:
               - autoscaling:UpdateAutoScalingGroup
             Effect: Allow
             Resource:
-              - !Sub "arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${AWS::StackName}-*"
+              - !Sub "arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${ASGStackName}-*"
           - Action:
               - autoscaling:DescribeAutoScalingGroups
               - autoscaling:DescribeScalingActivities
@@ -723,7 +739,7 @@ Resources:
               - cloudformation:DescribeStacks
               - cloudformation:DescribeChangeSet
             Effect: Allow
-            Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}-DeployImg/*"
+            Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ASGStackName}/*"
           - Action:
               - ec2:CreateTags
             Effect: Allow
@@ -831,7 +847,7 @@ Resources:
               StringEqualsIfExists:
                 cloudformation:ChangeSetName: deployimage
             Effect: Allow
-            Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}-DeployImg/*"
+            Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ASGStackName}/*"
       Roles:
         - Ref: DeployImgCreateActionRole
   # Policy for the specific action in CodePipeline that calls
@@ -850,7 +866,7 @@ Resources:
               StringEqualsIfExists:
                 cloudformation:ChangeSetName: deployimage
             Effect: Allow
-            Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}-DeployImg/*"
+            Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ASGStackName}/*"
       Roles:
         - Ref: DeployImgApplyActionRole
   # Policy for the temporary EC2 instance used by EC2 Image Builder while
@@ -864,10 +880,15 @@ Resources:
           - Action:
               - s3:GetObject
               - s3:ListBucket
+              - s3:PutObjectAcl
+              - s3:GetObjectVersion
+              - s3:GetBucketVersioning
+              - s3:PutObject
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
             Effect: Allow
-            Resource:
-              - !GetAtt DemoArtifactBucket.Arn
-              - !Sub "${DemoArtifactBucket.Arn}/*"
+            Resource: "*"
       Roles:
         - Ref: BuildImgEC2Role
   # Policy to allow AWS CloudWatch Event Rules to initiate AWS Codepipeline
