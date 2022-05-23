@@ -17,13 +17,14 @@ Parameters:
   InstanceType:
     Type: "String"
     Description: "Instance Type for running the instances"
+    Default: "t3.micro"
   IAMInstanceProfile:
     Type: "String"
     Description: "Instance Type for running the instances"
     Default: "Adapt-Github-BuildImgEC2InstanceProfile-9aCfgCP6X2hv"
   SecurityGroupId:
     Type: "String"
-    Description: "Enter the super user email address to be used"
+    Description: "Enter thr security group id to be used"
     Default: "sg-957b20a9"
 Resources:
   # Metadata around AMI to roll it out to a Development environment
