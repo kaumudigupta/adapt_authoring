@@ -819,6 +819,13 @@ Resources:
             Condition:
               StringLike:
                 iam:AWSServiceName: "autoscaling.amazonaws.com"
+          - Action:
+              - iam:GetRole
+              - iam:PassRole
+              - iam:GetRolePolicy
+            Effect: Allow
+            Resource:
+              - !GetAtt BuildImgEC2Role.Arn
       Roles:
         - Ref: DeployImgCFRole
   # Policy for the specific action in CodePipeline that calls
