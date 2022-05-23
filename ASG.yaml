@@ -67,10 +67,10 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       MinSize: "1"
-      MaxSize: "1"
+      MaxSize: "3"
       # Please REMOVE the next line if you want to avoid interfering
       # with existing capacity in the ASG
-      DesiredCapacity: "3"
+      DesiredCapacity: "1"
       LaunchTemplate:
         LaunchTemplateId: !Ref LaunchTemplate
         Version: !GetAtt LaunchTemplate.LatestVersionNumber
