@@ -1,6 +1,10 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
 Parameters:
+  KeyName:
+    Type: "String"
+    Description: "The name of the key pair to be used"
+    Default: "Adapt-KeyPair"
   BucketName:
     Type: "String"
     Description: "S3 Bucket containing build artifacts; should come from the CodeBuild step in Codepipeline"
@@ -103,6 +107,7 @@ Resources:
                     - echo "Installing npm modules in the server" >&2
                     - rm -f package-lock.json
                     - rm -rf node_modules
+                    - sudo npm config set unsafe-perm true
                     - npm install --production
                     - npm install -g grunt-cli
                     - yes ""|node install --install=Y --suEmail=${SuperUserEmail} --suPassword=${SuperUserPassword} --suRetypePassword=${SuperUserPassword}
@@ -153,13 +158,10 @@ Resources:
       InstanceTypes:
         - !Sub "${InstanceType}"
       Name: !Sub "${AWS::StackName}-InfraConfig"
-      KeyPair: "Adapt-KeyPair"
+      KeyPair: !Ref KeyName
       SecurityGroupIds:
         - !Ref SecurityGroupId
       SubnetId: !Ref SubnetId
-      Logging:
-        S3Logs:
-          S3BucketName: "github-codepipeline-artifacts"
 Outputs:
   DemoImageArn:
     Description: Reference to EC2 Image Builder Output Arn
