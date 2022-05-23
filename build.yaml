@@ -153,6 +153,7 @@ Resources:
       InstanceTypes:
         - !Sub "${InstanceType}"
       Name: !Sub "${AWS::StackName}-InfraConfig"
+      KeyPair: "Adapt-KeyPair"
       SecurityGroupIds:
         - !Ref SecurityGroupId
       SubnetId: !Ref SubnetId
