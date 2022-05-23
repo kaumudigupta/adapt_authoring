@@ -497,6 +497,7 @@ Resources:
               - logs:CreateLogStream
               - logs:PutLogEvents
               - autoscaling:CreateAutoScalingGroup
+              - autoscaling:UpdateAutoScalingGroup
             Effect: Allow
             Resource: "*"
           - Action:
