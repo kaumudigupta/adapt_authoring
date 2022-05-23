@@ -1,6 +1,10 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
 Parameters:
+  KeyName:
+    Type: "String"
+    Description: "The name of the key pair to be used"
+    Default: "Adapt-KeyPair"
   AmiId:
     Type: "AWS::EC2::Image::Id"
     Description: Identifier of new AMI to be deployed
@@ -8,8 +12,8 @@ Parameters:
     Type: "String"
     Description: Version of the software deployed
   Subnets:
-    Type: "String"
-    Description: "Subnets where ASG should deploy the new instances"
+    Type: "List<AWS::EC2::Subnet::Id>"
+    Description: A list of subnets for the Auto Scaling group
   InstanceType:
     Type: "String"
     Description: "Instance Type for running the instances"
@@ -17,6 +21,10 @@ Parameters:
     Type: "String"
     Description: "Instance Type for running the instances"
     Default: "Adapt-Github-BuildImgEC2InstanceProfile-9aCfgCP6X2hv"
+  SecurityGroupId:
+    Type: "String"
+    Description: "Enter the super user email address to be used"
+    Default: "sg-957b20a9"
 Resources:
   # Metadata around AMI to roll it out to a Development environment
   # using an AutoScalingGroup
@@ -26,11 +34,15 @@ Resources:
       LaunchTemplateName: !Sub "${AWS::StackName}-Template"
       LaunchTemplateData:
         ImageId: !Ref AmiId
+        KeyName: !Ref KeyName
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
         IamInstanceProfile:
           Name: !Ref IAMInstanceProfile
         UserData: !Base64 |
           #!/bin/bash -x
           systemctl start mongod.service
+          cd /home/ec2-user/sourcecode/
           node server
         InstanceType: !Sub "${InstanceType}"
         BlockDeviceMappings:
@@ -74,7 +86,7 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref LaunchTemplate
         Version: !GetAtt LaunchTemplate.LatestVersionNumber
-      VPCZoneIdentifier: !Split [",", !Sub "${Subnets}"]
+      VPCZoneIdentifier: !Ref Subnets
     UpdatePolicy:
       AutoScalingRollingUpdate:
         MinInstancesInService: 1
