@@ -43,6 +43,10 @@ Resources:
         UserData: !Base64 |
           #!/bin/bash -x
           systemctl start mongod.service
+          cd /home/ec2-user/sourcecode/temp
+          temp_path=`ls -l|awk 'FNR == 2 {print $9}'`
+          cd $temp_path/adapt_framework
+          npm install --unsafe-perm=true --loglevel error --production
           cd /home/ec2-user/sourcecode/
           node server
         InstanceType: !Sub "${InstanceType}"
