@@ -727,8 +727,7 @@ Resources:
               - autoscaling:TerminateInstanceInAutoScalingGroup
               - autoscaling:UpdateAutoScalingGroup
             Effect: Allow
-            Resource:
-              - !Sub "arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${ASGStackName}-*"
+            Resource: "*"
           - Action:
               - autoscaling:DescribeAutoScalingGroups
               - autoscaling:DescribeScalingActivities
@@ -792,11 +791,11 @@ Resources:
               - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*"
               - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*"
               - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*"
-          - Action:
-              - ec2:RunInstances
-            Effect: Allow
-            Resource:
               - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+          - Action:
+              - ec2:*
+            Effect: Allow
+            Resource: "*"
             Condition:
               Bool:
                 ec2:IsLaunchTemplateResource: true
