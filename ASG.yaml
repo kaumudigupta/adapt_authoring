@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT-0
 Parameters:
   KeyName:
-    Type: "String"
+    Type: "AWS::EC2::KeyPair::KeyName"
     Description: "The name of the key pair to be used"
     Default: "Adapt-KeyPair"
   AmiId:
@@ -20,11 +20,11 @@ Parameters:
     Default: "t3.micro"
   IAMInstanceProfile:
     Type: "String"
-    Description: "Instance Type for running the instances"
+    Description: "Instance profile for running the instances"
     Default: "Adapt-Github-BuildImgEC2InstanceProfile-9aCfgCP6X2hv"
   SecurityGroupId:
     Type: "String"
-    Description: "Enter thr security group id to be used"
+    Description: "Enter the security group id to be used"
     Default: "sg-957b20a9"
 Resources:
   # Metadata around AMI to roll it out to a Development environment
