@@ -107,11 +107,11 @@ Resources:
                     - echo "Installing npm modules in the server" >&2
                     - rm -f package-lock.json
                     - rm -rf node_modules
-                    - sudo npm config set unsafe-perm true
                     - npm install --production
                     - npm install -g grunt-cli
                     - yes ""|node install --install=Y --suEmail=${SuperUserEmail} --suPassword=${SuperUserPassword} --suRetypePassword=${SuperUserPassword}
                     - echo "Installation successful" >&2
+                    - chmod -R 755 /home/ec2-user/sourcecode
                     - sleep 10
       Description: !Sub
         - "${ShortName} Component"
