@@ -796,11 +796,6 @@ Resources:
               - ec2:*
             Effect: Allow
             Resource: "*"
-            Condition:
-              Bool:
-                ec2:IsLaunchTemplateResource: true
-              StringEquals:
-                ec2:InstanceType: !Ref InstanceType
           - Action:
               - ec2:RunInstances
             Effect: Allow
